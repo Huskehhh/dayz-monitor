@@ -2,14 +2,13 @@ extern crate dotenv;
 #[macro_use]
 extern crate lazy_static;
 
-use dashmap::DashMap;
-use std::collections::HashSet;
 use std::error::Error;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{env, thread};
 
+use dashmap::DashMap;
 use dotenv::dotenv;
 use serde::Deserialize;
 use serenity::async_trait;
@@ -20,7 +19,8 @@ use serenity::framework::StandardFramework;
 use serenity::futures::lock::Mutex;
 use serenity::http::Http;
 use serenity::model::channel::Message;
-use serenity::model::id::{ChannelId, UserId};
+use serenity::model::gateway::Activity;
+use serenity::model::id::ChannelId;
 use serenity::{model::gateway::Ready, model::Permissions};
 use serenity::{CacheAndHttp, Client};
 
@@ -56,12 +56,6 @@ async fn count(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
         send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
     }
     Ok(())
-}
-
-async fn send_message(http: &Http, channel: &ChannelId, content: &str) {
-    if let Err(why) = channel.say(&http, content).await {
-        eprintln!("Error when sending message => {}", why);
-    }
 }
 
 #[hook]
@@ -114,50 +108,75 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        let url = match ready.user.invite_url(&ctx.http, Permissions::empty()).await {
-            Ok(v) => v,
+        ctx.set_activity(Activity::playing(
+            "Monitoring DayZ server!\
+         More info: https://github.com/Huskehhh/dayz-monitor/",
+        ))
+        .await;
+
+        match ready.user.invite_url(&ctx.http, Permissions::empty()).await {
+            Ok(url) => {
+                println!("You can invite me using this url! {}", &url);
+            }
             Err(why) => {
                 eprintln!("Error getting invite url: {:?}", why);
-                return;
             }
         };
-
-        println!("You can invite me using this url! {}", &url);
     }
 }
 
 async fn get_server_status() -> Result<BattleMetricResponse, Box<dyn Error>> {
-    let url = "https://api.battlemetrics.com/servers/5526398";
-    Ok(reqwest::get(url)
+    let server_id = env::var("BATTLEMETRICS_SERVER_ID")
+        .expect("BATTLEMETRICS_SERVER_ID environment variable not found!");
+    let url = format!("https://api.battlemetrics.com/servers/{}", server_id);
+    Ok(reqwest::get(&url)
         .await?
         .json::<BattleMetricResponse>()
         .await?)
 }
 
-#[tokio::main]
+async fn send_message(http: &Http, channel: &ChannelId, content: &str) {
+    if let Err(why) = channel.say(&http, content).await {
+        eprintln!("Error when sending message => {}", why);
+    }
+}
+
 async fn create_embedded_message(http: &Http, result: &BattleMetricResponse) {
-    let channel = ChannelId(767248334724661319);
+    let channel_id_string =
+        env::var("TIME_CHANNEL_ID").expect("No TIME_CHANNEL_ID environment variable set!");
 
-    let server_status = format!(
-        "{} is {}",
-        &result.data.attributes.name, &result.data.attributes.status
-    );
+    match channel_id_string.parse::<u64>() {
+        Ok(channel_id) => {
+            let channel = ChannelId(channel_id);
 
-    if let Err(e) = channel
-        .send_message(&http, |m| {
-            m.content(&result.data.attributes.name);
+            let server_status = format!(
+                "{} is {}",
+                &result.data.attributes.name, &result.data.attributes.status
+            );
 
-            m.embed(|e| {
-                e.title(server_status);
-                e.field("Time:", &result.data.attributes.details.time, false);
-                e.field("Player count:", &result.data.attributes.players, false);
+            if let Err(e) = channel
+                .send_message(&http, |m| {
+                    m.content(&result.data.attributes.name);
 
-                e
-            })
-        })
-        .await
-    {
-        eprintln!("Error sending message to channel, {}", e);
+                    m.embed(|e| {
+                        e.title(server_status);
+                        e.field("Time:", &result.data.attributes.details.time, false);
+                        e.field("Player count:", &result.data.attributes.players, false);
+
+                        e
+                    })
+                })
+                .await
+            {
+                eprintln!("Error sending message to channel, {}", e);
+            }
+        }
+        Err(why) => {
+            eprintln!(
+                "Error parsing the TIME_CHANNEL_ID environment variable value! Is it correct? {}",
+                why
+            );
+        }
     }
 }
 
@@ -177,7 +196,7 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
                     .time)
                 {
                     // Create embedded message
-                    create_embedded_message(&http, &result);
+                    create_embedded_message(&http, &result).await;
 
                     // Then overwrite cache with new data
                     CACHE.insert(true, result);
@@ -197,24 +216,8 @@ async fn main() {
     let token =
         env::var("DISCORD_TOKEN").expect("Expected a token in your environment (DISCORD_TOKEN)");
 
-    let http = Http::new_with_token(&token);
-
-    let (owners, bot_id) = match http.get_current_application_info().await {
-        Ok(info) => {
-            let mut owners = HashSet::new();
-            owners.insert(UserId(276519212175065088));
-            (owners, info.id)
-        }
-        Err(why) => panic!("Could not access application info: {:?}", why),
-    };
-
     let framework = StandardFramework::new()
-        .configure(|c| {
-            c.prefix("!")
-                .owners(owners)
-                .on_mention(Some(bot_id))
-                .with_whitespace(true)
-        })
+        .configure(|c| c.prefix("!").with_whitespace(true))
         .normal_message(normal_message)
         .on_dispatch_error(dispatch_error)
         .group(&GENERAL_GROUP);
@@ -225,7 +228,6 @@ async fn main() {
         .await
         .expect("Error creating client");
 
-    println!("Scheduling task to run every minute!");
     let mutex_http = Mutex::new(client.cache_and_http.clone());
 
     thread::spawn(move || {
