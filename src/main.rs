@@ -72,9 +72,9 @@ async fn status(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult 
 
 #[command]
 #[aliases("i")]
-async fn info(ctx: &Context, _msg: &Message, mut _args: Args) -> CommandResult {
+async fn info(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
     if let Some(cached_result) = CACHE.get(&true) {
-        create_embedded_message(&ctx.http, &cached_result).await;
+        create_embedded_message(&ctx.http, &cached_result, Some(msg.channel_id)).await;
     }
     Ok(())
 }
@@ -161,41 +161,55 @@ async fn send_message(http: &Http, channel: &ChannelId, content: &str) {
     }
 }
 
-async fn create_embedded_message(http: &Http, result: &BattleMetricResponse) {
-    let channel_id_string =
-        env::var("TIME_CHANNEL_ID").expect("No TIME_CHANNEL_ID environment variable set!");
+async fn create_embedded_message(
+    http: &Http,
+    result: &BattleMetricResponse,
+    channel: Option<ChannelId>,
+) {
+    let mut channel_id = ChannelId(0);
 
-    match channel_id_string.parse::<u64>() {
-        Ok(channel_id) => {
-            let channel = ChannelId(channel_id);
+    // If optional is none, we need to build it from the env var
+    if channel.is_none() {
+        let channel_id_string =
+            env::var("TIME_CHANNEL_ID").expect("No TIME_CHANNEL_ID environment variable set!");
 
-            let server_status = format!(
-                "{} is {}",
-                &result.data.attributes.name, &result.data.attributes.status
-            );
-
-            if let Err(e) = channel
-                .send_message(&http, |m| {
-                    m.content(&result.data.attributes.name);
-
-                    m.embed(|e| {
-                        e.title(server_status);
-                        e.field("Time:", &result.data.attributes.details.time, false);
-                        e.field("Player count:", &result.data.attributes.players, false);
-
-                        e
-                    })
-                })
-                .await
-            {
-                eprintln!("Error sending message to channel, {}", e);
+        match channel_id_string.parse::<u64>() {
+            Ok(channel_id_parsed) => {
+                channel_id = ChannelId(channel_id_parsed);
+            }
+            Err(why) => {
+                eprintln!(
+                    "Error parsing the TIME_CHANNEL_ID environment variable value! Is it correct? {}",
+                    why
+                );
             }
         }
-        Err(why) => {
-            eprintln!(
-                "Error parsing the TIME_CHANNEL_ID environment variable value! Is it correct? {}",
-                why
-            );
+    } else if channel.is_some() {
+        channel_id = channel.unwrap();
+    }
+
+    // Wont ever be this, but just double checking!
+    if channel_id.0 != 0 {
+        let server_status = format!(
+            "{} is {}",
+            &result.data.attributes.name, &result.data.attributes.status
+        );
+
+        if let Err(e) = channel_id
+            .send_message(&http, |m| {
+                m.content(&result.data.attributes.name);
+
+                m.embed(|e| {
+                    e.title(server_status);
+                    e.field("Time:", &result.data.attributes.details.time, false);
+                    e.field("Player count:", &result.data.attributes.players, false);
+
+                    e
+                })
+            })
+            .await
+        {
+            eprintln!("Error sending message to channel, {}", e);
         }
     }
 }
@@ -218,7 +232,7 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
                     // If no env var for time_channel_id is set, don't create embedded messages
                     if env::var("TIME_CHANNEL_ID").is_ok() {
                         // Create embedded message
-                        create_embedded_message(&http, &result).await;
+                        create_embedded_message(&http, &result, None).await;
                     }
 
                     // Then overwrite cache with new data
