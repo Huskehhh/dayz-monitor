@@ -34,10 +34,12 @@ struct General;
 
 #[command]
 #[aliases("t")]
-#[owners_only]
 async fn time(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
     if let Some(result) = CACHE.get(&true) {
-        let formatted_result = format!("Time on the DayZ Server is: ``{}``", &result.data.attributes.details.time);
+        let formatted_result = format!(
+            "Time on the DayZ Server is: ``{}``",
+            &result.data.attributes.details.time
+        );
         send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
     }
     Ok(())
@@ -123,6 +125,32 @@ async fn get_server_status() -> Result<BattleMetricResponse, Box<dyn Error>> {
     Ok(result)
 }
 
+async fn create_embedded_message(http: &Http, result: &BattleMetricResponse) {
+    let channel = ChannelId(767248334724661319);
+
+    let server_status = format!(
+        "{} is {}",
+        &result.data.attributes.name, &result.data.attributes.status
+    );
+
+    if let Err(e) = channel
+        .send_message(&http, |m| {
+            m.content(&result.data.attributes.name);
+
+            m.embed(|e| {
+                e.title(server_status);
+                e.field("Time:", &result.data.attributes.details.time, false);
+                e.field("Player count:", &result.data.attributes.players, false);
+
+                e
+            })
+        })
+        .await
+    {
+        eprintln!("Error sending message to channel, {}", e);
+    }
+}
+
 #[tokio::main]
 pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
     loop {
@@ -130,29 +158,24 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
         let http = &lock.http;
 
         if let Ok(result) = get_server_status().await {
-            let channel = ChannelId(767248334724661319);
+            if let Some(cached_result) = CACHE.get(&true) {
+                // If the cached result time is not eq to the current time, lets make a message!
+                if !cached_result.data.attributes.details.time.eq(&result
+                    .data
+                    .attributes
+                    .details
+                    .time)
+                {
+                    // Create embedded message
+                    create_embedded_message(&http, &result).await;
 
-            let server_status = format!("{} is {}",
-                                        &result.data.attributes.name, &result.data.attributes.status);
-
-            if let Err(e) = channel
-                .send_message(&http, |m| {
-                    m.content(&result.data.attributes.name);
-
-                    m.embed(|e| {
-                        e.title(server_status);
-                        e.field("Time:", &result.data.attributes.details.time, false);
-                        e.field("Player count:", &result.data.attributes.players, false);
-
-                        e
-                    })
-                })
-                .await {
-                eprintln!("Error sending message to channel, {}", e);
+                    // Then overwrite cache with new data
+                    CACHE.insert(true, result);
+                }
             }
         }
 
-        sleep(Duration::from_secs(600));
+        sleep(Duration::from_secs(120));
     }
 }
 
@@ -223,6 +246,9 @@ mod tests {
 
         let cached_result = CACHE.get(&true);
 
-        assert_eq!(result.unwrap().data.attributes.name, cached_result.unwrap().data.attributes.name);
+        assert_eq!(
+            result.unwrap().data.attributes.name,
+            cached_result.unwrap().data.attributes.name
+        );
     }
 }
