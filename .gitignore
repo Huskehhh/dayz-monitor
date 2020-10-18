@@ -3,3 +3,4 @@
 token*
 /.idea
 .env
+*.lock
