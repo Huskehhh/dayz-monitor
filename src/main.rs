@@ -182,6 +182,8 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
                     // Then overwrite cache with new data
                     CACHE.insert(true, result);
                 }
+            } else {
+                CACHE.insert(true, result);
             }
         }
 
