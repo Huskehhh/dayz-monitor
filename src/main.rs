@@ -244,8 +244,14 @@ async fn main() {
 mod tests {
     use super::*;
 
+    fn setup_env() {
+        dotenv().ok();
+    }
+
     #[tokio::test]
     async fn test_api_call() {
+        setup_env();
+
         let result = get_server_status().await;
         assert!(result.is_ok());
 
@@ -256,14 +262,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache() {
-        let result = get_server_status().await;
-        assert!(result.is_ok());
+        setup_env();
 
-        let cached_result = CACHE.get(&true);
+        let result = get_server_status().await.unwrap();
+
+        CACHE.insert(true, result.clone());
+
+        let cached_result = CACHE.get(&true).unwrap();
 
         assert_eq!(
-            result.unwrap().data.attributes.name,
-            cached_result.unwrap().data.attributes.name
+            result.data.attributes.name,
+            cached_result.data.attributes.name
         );
     }
 }
