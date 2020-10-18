@@ -108,11 +108,12 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        ctx.set_activity(Activity::playing(
-            "Monitoring DayZ server!\
-         More info: https://github.com/Huskehhh/dayz-monitor/",
-        ))
-        .await;
+        if let Some(result) = CACHE.get(&true) {
+            ctx.set_activity(Activity::playing(
+                &result.data.attributes.name,
+            ))
+                .await;
+        }
 
         match ready.user.invite_url(&ctx.http, Permissions::empty()).await {
             Ok(url) => {
@@ -206,7 +207,7 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
             }
         }
 
-        sleep(Duration::from_secs(30));
+        sleep(Duration::from_secs(10));
     }
 }
 
