@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 #[group]
-#[commands(time, count)]
+#[commands(time, count, status, info)]
 struct General;
 
 #[command]
@@ -54,6 +54,27 @@ async fn count(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
             &result.data.attributes.players
         );
         send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
+    }
+    Ok(())
+}
+
+#[command]
+async fn status(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
+    if let Some(result) = CACHE.get(&true) {
+        let formatted_result = format!(
+            "{} is {}",
+            &result.data.attributes.name, &result.data.attributes.status
+        );
+        send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
+    }
+    Ok(())
+}
+
+#[command]
+#[aliases("i")]
+async fn info(ctx: &Context, _msg: &Message, mut _args: Args) -> CommandResult {
+    if let Some(cached_result) = CACHE.get(&true) {
+        create_embedded_message(&ctx.http, &cached_result).await;
     }
     Ok(())
 }
@@ -109,9 +130,7 @@ impl EventHandler for Handler {
         println!("{} is connected!", ready.user.name);
 
         if let Some(result) = CACHE.get(&true) {
-            ctx.set_activity(Activity::playing(
-                &result.data.attributes.name,
-            ))
+            ctx.set_activity(Activity::playing(&result.data.attributes.name))
                 .await;
         }
 

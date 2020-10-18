@@ -70,4 +70,10 @@ The bot will then provide you with an invite link to click, which will drag him 
 Enjoy the bot, if you pick up on any bugs or would like more functionality, feel free to let me know via the issue
  tracker [here](https://github.com/Huskehhh/dayz-monitor/issues)
  
+## Commands
+- !time (or !t) -> Retrieves the current time of the DayZ server
+- !count (or !c) -> Retrieves the current player count of the DayZ server
+- !status -> Retrieves the status of the DayZ server (whether it's online or not!)
+- !info -> Displays all the info in an embedded message
+ 
 ## Massive thanks to BattleMetrics, this project wouldn't be so easy without their API!
