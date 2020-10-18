@@ -115,16 +115,13 @@ impl EventHandler for Handler {
 
 async fn get_server_status() -> Result<BattleMetricResponse, Box<dyn Error>> {
     let url = "https://api.battlemetrics.com/servers/5526398";
-    let result = reqwest::get(url)
+    Ok(reqwest::get(url)
         .await?
         .json::<BattleMetricResponse>()
-        .await?;
-
-    CACHE.insert(true, result.clone());
-
-    Ok(result)
+        .await?)
 }
 
+#[tokio::main]
 async fn create_embedded_message(http: &Http, result: &BattleMetricResponse) {
     let channel = ChannelId(767248334724661319);
 
@@ -167,7 +164,7 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
                     .time)
                 {
                     // Create embedded message
-                    create_embedded_message(&http, &result).await;
+                    create_embedded_message(&http, &result);
 
                     // Then overwrite cache with new data
                     CACHE.insert(true, result);
@@ -175,7 +172,7 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
             }
         }
 
-        sleep(Duration::from_secs(120));
+        sleep(Duration::from_secs(60));
     }
 }
 
