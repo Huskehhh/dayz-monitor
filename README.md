@@ -5,7 +5,6 @@ DayZ monitoring discord bot, that doesn't require RCon! (Thanks to BattleMetrics
 - Retrieves player count
 - Retrieves the time on the server
 - Lightweight as hell (my instance is running on 3MB of RAM)
-- Will post time updates into a specified Discord channel (optional)
 
 ## Setup
 ### Step 1. Compilation
@@ -30,7 +29,6 @@ So simply go ahead and create a ``.env`` file contaning these following values:
 
 ```.env
 DISCORD_TOKEN=putyoursupersecretdiscordbottokenhere
-TIME_CHANNEL_ID=putthediscordtimechannelidhere
 BATTLEMETRICS_SERVER_ID=putyourbattlemetricsserveridhere
 ```
 
@@ -43,13 +41,6 @@ Steps:
 1. Create a new application at https://discordapp.com/developers/applications/
 2. On the application's page, go to the "Bot" tab, click "Add Bot", and confirm!
 3. Copy the "Token"
-
-``TIME_CHANNEL_ID`` (optional)
-This is the Discord ID of the channel you wish the bot to post updates in, if you want to disable this, remove this.
-
-Steps:
-1. Enable developer mode in Discord
-2. Right click channel you want -> Copy ID
 
 ``BATTLEMETRICS_SERVER_ID`` (required)
 Steps:
