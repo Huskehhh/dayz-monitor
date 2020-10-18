@@ -196,8 +196,11 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
                     .details
                     .time)
                 {
-                    // Create embedded message
-                    create_embedded_message(&http, &result).await;
+                    // If no env var for time_channel_id is set, don't create embedded messages
+                    if env::var("TIME_CHANNEL_ID").is_ok() {
+                        // Create embedded message
+                        create_embedded_message(&http, &result).await;
+                    }
 
                     // Then overwrite cache with new data
                     CACHE.insert(true, result);
