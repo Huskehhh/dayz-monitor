@@ -4,8 +4,7 @@ DayZ monitoring discord bot, that doesn't require RCon! (Thanks to BattleMetrics
 ## Features:
 - Retrieves player count
 - Retrieves the time on the server
-- Lightweight
-- Self hosted
+- Lightweight as hell (my instance is running on 3MB of RAM)
 - Will post time updates into a specified Discord channel (optional)
 
 ## Setup
