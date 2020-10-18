@@ -29,7 +29,7 @@ lazy_static! {
 }
 
 #[group]
-#[commands(time)]
+#[commands(time, count)]
 struct General;
 
 #[command]
@@ -39,6 +39,19 @@ async fn time(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
         let formatted_result = format!(
             "Time on the DayZ Server is: ``{}``",
             &result.data.attributes.details.time
+        );
+        send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
+    }
+    Ok(())
+}
+
+#[command]
+#[aliases("c")]
+async fn count(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
+    if let Some(result) = CACHE.get(&true) {
+        let formatted_result = format!(
+            "There are ``{}`` players on the DayZ Server",
+            &result.data.attributes.players
         );
         send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
     }
@@ -172,7 +185,7 @@ pub async fn application_task(mutex_http: Mutex<Arc<CacheAndHttp>>) {
             }
         }
 
-        sleep(Duration::from_secs(60));
+        sleep(Duration::from_secs(30));
     }
 }
 
