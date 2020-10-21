@@ -1,4 +1,4 @@
-# dayz-monitor
+# dayz-monitor ![build status](https://ci.husk.pro/dayz-monitor/badge)
 DayZ monitoring discord bot, that doesn't require RCon! (Thanks to BattleMetrics)
 
 ## Features:
