@@ -30,6 +30,8 @@ So simply go ahead and create a ``.env`` file contaning these following values:
 ```.env
 DISCORD_TOKEN=putyoursupersecretdiscordbottokenhere
 BATTLEMETRICS_SERVER_ID=putyourbattlemetricsserveridhere
+GUILD_ID=putyourdiscordidhere
+SERVER_NAME=Server name here
 ```
 
 Individually looking at each of the variables:
@@ -46,6 +48,9 @@ Steps:
 Steps:
 1. Go onto [BattleMetrics website](https://www.battlemetrics.com/servers) and find your server
 2. Copy the ID out of the URL, for example ``https://www.battlemetrics.com/servers/dayz/5526398`` would be ``5526398``
+
+``GUILD_ID`` and ``SERVER_NAME`` (optional)
+This will enable the creation of a voice channel that will update, showing the player count in a voice channel
 
 ### Step 3. Invite the bot
 

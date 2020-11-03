@@ -196,38 +196,46 @@ pub async fn update_cache(mutex_http: Mutex<Arc<CacheAndHttp>>) -> Result<(), Bo
         let player_count = result.data.attributes.players;
         CACHE.insert(true, result);
 
-        let guild_id = env::var("GUILD_ID").expect("No GUILD_ID set in .env!");
-        let server_name = env::var("SERVER_NAME").expect("No SERVER_NAME set in .env!");
+        let guild_id_var = env::var("GUILD_ID");
+        let server_name_var = env::var("SERVER_NAME");
 
-        let lock = mutex_http.lock().await;
-        let http = &lock.http;
+        if let Ok(guild_id) = guild_id_var {
+            if let Ok(server_name) = server_name_var {
+                let lock = mutex_http.lock().await;
+                let http = &lock.http;
 
-        let parsed_guild_id = guild_id.parse::<u64>()?;
-        let guild = http.get_guild(parsed_guild_id).await?;
+                let parsed_guild_id = guild_id.parse::<u64>()?;
+                let guild = http.get_guild(parsed_guild_id).await?;
 
-        let name = format!(
-            "{}: {}",
-            server_name, player_count
-        );
+                let name = format!("{}: {}", server_name, player_count);
 
-        let channels = guild.channels(&http).await?;
+                let channels = guild.channels(&http).await?;
 
-        let mut exists = false;
+                let mut exists = false;
 
-        for entry in channels {
-            if entry.1.name.eq(&name) {
-                exists = true;
+                for mut entry in channels {
+                    if entry.1.name.starts_with(&server_name) {
+                        exists = true;
+
+                        println!("Updating channel to: '{}'", name);
+
+                        entry.1.edit(&http, |c| {
+                            c.name(&name);
+                            c
+                        }).await?;
+                    }
+                }
+
+                if !exists {
+                    guild
+                        .create_channel(http, |c| {
+                            c.name(&name);
+                            c.kind(ChannelType::Voice);
+                            c
+                        })
+                        .await?;
+                }
             }
-        }
-
-        if !exists {
-            guild
-                .create_channel(http, |c| {
-                    c.name(name);
-                    c.kind(ChannelType::Voice);
-                    c
-                })
-                .await?;
         }
 
         sleep(Duration::from_secs(10));
