@@ -193,9 +193,11 @@ async fn create_embedded_message(
 pub async fn update_cache(mutex_http: Mutex<Arc<CacheAndHttp>>) -> Result<(), Box<dyn Error>> {
     loop {
         let result = get_server_status().await?;
-        CACHE.insert(true, result.clone());
+        let player_count = result.data.attributes.players;
+        CACHE.insert(true, result);
 
         let guild_id = env::var("GUILD_ID").expect("No GUILD_ID set in .env!");
+        let server_name = env::var("SERVER_NAME").expect("No SERVER_NAME set in .env!");
 
         let lock = mutex_http.lock().await;
         let http = &lock.http;
@@ -205,7 +207,7 @@ pub async fn update_cache(mutex_http: Mutex<Arc<CacheAndHttp>>) -> Result<(), Bo
 
         let name = format!(
             "{}: {}",
-            result.data.attributes.name, result.data.attributes.players
+            server_name, player_count
         );
 
         let channels = guild.channels(&http).await?;
