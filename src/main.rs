@@ -10,17 +10,19 @@ use std::{env, thread};
 use dashmap::DashMap;
 use dotenv::dotenv;
 use serde::Deserialize;
-use serenity::async_trait;
 use serenity::client::{Context, EventHandler};
 use serenity::framework::standard::macros::*;
 use serenity::framework::standard::{Args, CommandResult, DispatchError};
 use serenity::framework::StandardFramework;
 use serenity::http::Http;
-use serenity::model::channel::Message;
+use serenity::model::channel::{ChannelType, Message};
 use serenity::model::gateway::Activity;
 use serenity::model::id::ChannelId;
 use serenity::Client;
+use serenity::{async_trait, CacheAndHttp};
 use serenity::{model::gateway::Ready, model::Permissions};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 lazy_static! {
     static ref CACHE: DashMap<bool, BattleMetricResponse> = DashMap::new();
@@ -188,11 +190,32 @@ async fn create_embedded_message(
 }
 
 #[tokio::main]
-pub async fn update_cache() {
+pub async fn update_cache(mutex_http: Mutex<Arc<CacheAndHttp>>) -> Result<(), Box<dyn Error>> {
     loop {
-        if let Ok(result) = get_server_status().await {
-            CACHE.insert(true, result);
-        }
+        let result = get_server_status().await?;
+        CACHE.insert(true, result.clone());
+
+        let guild_id = env::var("GUILD_ID").expect("No GUILD_ID set in .env!");
+
+        let lock = mutex_http.lock().await;
+        let http = &lock.http;
+
+        let parsed_guild_id = guild_id.parse::<u64>()?;
+        let guild = http.get_guild(parsed_guild_id).await?;
+
+        let name = format!(
+            "{}: {}",
+            result.data.attributes.name, result.data.attributes.players
+        );
+
+        guild
+            .create_channel(http, |c| {
+                c.name(name);
+                c.kind(ChannelType::Voice);
+                c
+            })
+            .await?;
+
         sleep(Duration::from_secs(10));
     }
 }
@@ -204,19 +227,23 @@ async fn main() {
         env::var("DISCORD_TOKEN").expect("Expected a token in your environment (DISCORD_TOKEN)");
 
     let framework = StandardFramework::new()
-        .configure(|c| c.prefix("!").with_whitespace(true))
+        .configure(|c| c.prefixes(vec!["!", "."]).with_whitespace(true))
         .normal_message(normal_message)
         .on_dispatch_error(dispatch_error)
         .group(&GENERAL_GROUP);
 
-    let mut client = Client::new(&token)
+    let mut client = Client::builder(&token)
         .framework(framework)
         .event_handler(Handler)
         .await
         .expect("Error creating client");
 
+    let mutex_http = Mutex::new(client.cache_and_http.clone());
+
     thread::spawn(|| {
-        update_cache();
+        if let Err(why) = update_cache(mutex_http) {
+            eprintln!("Error when updating cache: {}", why);
+        }
     });
 
     if let Err(why) = client.start().await {

@@ -13,7 +13,7 @@ lazy_static = "1.4.0"
 dashmap = "3.11.10"
 
 [dependencies.serenity]
-version = "0.9.0-rc.2"
+version = "0.9.0"
 default-features = false
 features = ["client", "gateway", "rustls_backend", "model", "framework", "standard_framework"]
 
