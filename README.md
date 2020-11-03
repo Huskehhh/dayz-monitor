@@ -51,6 +51,8 @@ Steps:
 
 ``GUILD_ID`` and ``SERVER_NAME`` (optional)
 This will enable the creation of a voice channel that will update, showing the player count in a voice channel
+``GUILD_ID`` must be set to the discord server id
+``SERVER_NAME`` this is the name of the voice channel
 
 ### Step 3. Invite the bot
 
