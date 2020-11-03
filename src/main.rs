@@ -3,6 +3,7 @@ extern crate dotenv;
 extern crate lazy_static;
 
 use std::error::Error;
+use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use std::{env, thread};
@@ -21,7 +22,6 @@ use serenity::model::id::ChannelId;
 use serenity::Client;
 use serenity::{async_trait, CacheAndHttp};
 use serenity::{model::gateway::Ready, model::Permissions};
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 lazy_static! {
@@ -208,13 +208,25 @@ pub async fn update_cache(mutex_http: Mutex<Arc<CacheAndHttp>>) -> Result<(), Bo
             result.data.attributes.name, result.data.attributes.players
         );
 
-        guild
-            .create_channel(http, |c| {
-                c.name(name);
-                c.kind(ChannelType::Voice);
-                c
-            })
-            .await?;
+        let channels = guild.channels(&http).await?;
+
+        let mut exists = false;
+
+        for entry in channels {
+            if entry.1.name.eq(&name) {
+                exists = true;
+            }
+        }
+
+        if !exists {
+            guild
+                .create_channel(http, |c| {
+                    c.name(name);
+                    c.kind(ChannelType::Voice);
+                    c
+                })
+                .await?;
+        }
 
         sleep(Duration::from_secs(10));
     }
