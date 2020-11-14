@@ -315,22 +315,14 @@ mod tests {
     async fn test_cache() {
         setup_env();
 
-        println!("setup");
-
         let result = get_server_status().await.unwrap();
         let mut write_guard = CACHED.write().await;
         *write_guard = result.clone();
 
-        println!("write_guard");
-
         std::mem::drop(write_guard);
-
-        println!("mem drop");
 
         let cached_result = &CACHED.read().await;
         let cached_name = cached_result.data.as_ref().unwrap().attributes.name.clone();
-
-        println!("cached result");
 
         assert_eq!(result.data.unwrap().attributes.name, cached_name);
     }
