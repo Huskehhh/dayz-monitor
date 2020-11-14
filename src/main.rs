@@ -1,15 +1,14 @@
 extern crate dotenv;
-#[macro_use]
-extern crate lazy_static;
 
 use std::error::Error;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use std::{env, thread};
 
-use dashmap::DashMap;
+use async_rwlock::RwLock;
 use dotenv::dotenv;
+use once_cell::sync::Lazy;
 use serde::Deserialize;
 use serenity::client::{Context, EventHandler};
 use serenity::framework::standard::macros::*;
@@ -22,11 +21,13 @@ use serenity::model::id::ChannelId;
 use serenity::Client;
 use serenity::{async_trait, CacheAndHttp};
 use serenity::{model::gateway::Ready, model::Permissions};
-use tokio::sync::Mutex;
 
-lazy_static! {
-    static ref CACHE: DashMap<bool, BattleMetricResponse> = DashMap::new();
-}
+static CACHED: Lazy<Arc<RwLock<BattleMetricResponse>>> = Lazy::new(|| {
+    let battle_metrics_response = BattleMetricResponse::default();
+    let mutex = RwLock::new(battle_metrics_response);
+    let arc = Arc::new(mutex);
+    arc
+});
 
 #[group]
 #[commands(time, count, status, info)]
@@ -35,45 +36,53 @@ struct General;
 #[command]
 #[aliases("t")]
 async fn time(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
-    if let Some(result) = CACHE.get(&true) {
+    let lock = &CACHED.read().await;
+
+    if let Some(result) = &lock.data {
         let formatted_result = format!(
             "Time on the DayZ Server is: ``{}``",
-            &result.data.attributes.details.time
+            result.attributes.details.time
         );
         send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
     }
+
     Ok(())
 }
 
 #[command]
 #[aliases("c")]
 async fn count(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
-    if let Some(result) = CACHE.get(&true) {
+    let lock = &CACHED.read().await;
+
+    if let Some(result) = &lock.data {
         let formatted_result = format!(
             "There are ``{}`` players on the DayZ Server",
-            &result.data.attributes.players
+            &result.attributes.players
         );
         send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
     }
+
     Ok(())
 }
 
 #[command]
 async fn status(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
-    if let Some(result) = CACHE.get(&true) {
-        let formatted_result = format!(
-            "{} is {}",
-            &result.data.attributes.name, &result.data.attributes.status
-        );
+    let lock = CACHED.read().await;
+
+    if let Some(result) = &lock.data {
+        let name = &result.attributes.name;
+        let status = &result.attributes.status;
+        let formatted_result = format!("{} is {}", &name, &status);
         send_message(&ctx.http, &msg.channel_id, &formatted_result).await;
     }
+
     Ok(())
 }
 
 #[command]
 #[aliases("i")]
 async fn info(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
-    if let Some(cached_result) = CACHE.get(&true) {
+    if let Some(cached_result) = &CACHED.read().await.data {
         create_embedded_message(&ctx.http, &cached_result, msg.channel_id).await;
     }
     Ok(())
@@ -101,7 +110,13 @@ async fn dispatch_error(ctx: &Context, msg: &Message, error: DispatchError) {
 
 #[derive(Debug, Deserialize, Clone)]
 struct BattleMetricResponse {
-    data: DataObject,
+    data: Option<DataObject>,
+}
+
+impl Default for BattleMetricResponse {
+    fn default() -> Self {
+        BattleMetricResponse { data: None }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -121,7 +136,6 @@ struct Attributes {
 struct Details {
     time: String,
 }
-
 struct Handler;
 
 #[async_trait]
@@ -129,8 +143,8 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
 
-        if let Some(result) = CACHE.get(&true) {
-            ctx.set_activity(Activity::playing(&result.data.attributes.name))
+        if let Some(result) = &CACHED.read().await.data {
+            ctx.set_activity(Activity::playing(&result.attributes.name))
                 .await;
         }
 
@@ -161,24 +175,20 @@ async fn send_message(http: &Http, channel: &ChannelId, content: &str) {
     }
 }
 
-async fn create_embedded_message(
-    http: &Http,
-    result: &BattleMetricResponse,
-    channel_id: ChannelId,
-) {
+async fn create_embedded_message(http: &Http, result: &DataObject, channel_id: ChannelId) {
     let server_status = format!(
         "{} is {}",
-        &result.data.attributes.name, &result.data.attributes.status
+        &result.attributes.name, &result.attributes.status
     );
 
     if let Err(e) = channel_id
         .send_message(&http, |m| {
-            m.content(&result.data.attributes.name);
+            m.content(&result.attributes.name);
 
             m.embed(|e| {
                 e.title(server_status);
-                e.field("Time:", &result.data.attributes.details.time, false);
-                e.field("Player count:", &result.data.attributes.players, false);
+                e.field("Time:", &result.attributes.details.time, false);
+                e.field("Player count:", &result.attributes.players, false);
 
                 e
             })
@@ -193,15 +203,20 @@ async fn create_embedded_message(
 pub async fn update_cache(mutex_http: Mutex<Arc<CacheAndHttp>>) -> Result<(), Box<dyn Error>> {
     loop {
         let result = get_server_status().await?;
-        let player_count = result.data.attributes.players;
-        CACHE.insert(true, result);
+        let mut write_guard = CACHED.write().await;
 
+        // Set to new value
+        *write_guard = result.clone();
+
+        std::mem::drop(write_guard);
+
+        let player_count = result.data.unwrap().attributes.players;
         let guild_id_var = env::var("GUILD_ID");
         let server_name_var = env::var("SERVER_NAME");
 
         if let Ok(guild_id) = guild_id_var {
             if let Ok(server_name) = server_name_var {
-                let lock = mutex_http.lock().await;
+                let lock = mutex_http.lock().unwrap();
                 let http = &lock.http;
 
                 let parsed_guild_id = guild_id.parse::<u64>()?;
@@ -219,10 +234,13 @@ pub async fn update_cache(mutex_http: Mutex<Arc<CacheAndHttp>>) -> Result<(), Bo
 
                         println!("Updating channel to: '{}'", name);
 
-                        entry.1.edit(&http, |c| {
-                            c.name(&name);
-                            c
-                        }).await?;
+                        entry
+                            .1
+                            .edit(&http, |c| {
+                                c.name(&name);
+                                c
+                            })
+                            .await?;
                     }
                 }
 
@@ -290,22 +308,30 @@ mod tests {
 
         let unwrapped = result.unwrap();
 
-        assert_ne!(unwrapped.data.attributes.name, "".to_owned())
+        assert_ne!(unwrapped.data.unwrap().attributes.name, "".to_owned())
     }
 
     #[tokio::test]
     async fn test_cache() {
         setup_env();
 
+        println!("setup");
+
         let result = get_server_status().await.unwrap();
+        let mut write_guard = CACHED.write().await;
+        *write_guard = result.clone();
 
-        CACHE.insert(true, result.clone());
+        println!("write_guard");
 
-        let cached_result = CACHE.get(&true).unwrap();
+        std::mem::drop(write_guard);
 
-        assert_eq!(
-            result.data.attributes.name,
-            cached_result.data.attributes.name
-        );
+        println!("mem drop");
+
+        let cached_result = &CACHED.read().await;
+        let cached_name = cached_result.data.as_ref().unwrap().attributes.name.clone();
+
+        println!("cached result");
+
+        assert_eq!(result.data.unwrap().attributes.name, cached_name);
     }
 }
