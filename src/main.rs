@@ -95,17 +95,17 @@ async fn normal_message(_ctx: &Context, msg: &Message) {
 
 #[hook]
 async fn dispatch_error(ctx: &Context, msg: &Message, error: DispatchError) {
-    if let DispatchError::Ratelimited(duration) = error {
-        let _ = msg
-            .channel_id
-            .say(
-                &ctx.http,
-                &format!("Try this again in {} seconds.", duration.as_secs()),
-            )
-            .await;
+    if let DispatchError::Ratelimited(info) = error {
+        if info.is_first_try {
+            let _ = msg
+                .channel_id
+                .say(
+                    &ctx.http,
+                    &format!("Try this again in {} seconds.", info.as_secs()),
+                )
+                .await;
+        }
     }
-
-    println!("Error on dispatch: {:#?}", error);
 }
 
 #[derive(Debug, Deserialize, Clone)]
