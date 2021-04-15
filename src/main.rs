@@ -1,13 +1,10 @@
 extern crate dotenv;
 
+use std::error::Error;
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
 use std::{env, thread};
-use std::{
-    error::Error,
-    sync::atomic::{AtomicI32, Ordering},
-};
 
 use async_rwlock::RwLock;
 use dotenv::dotenv;
@@ -183,10 +180,8 @@ async fn get_server_status() -> Result<BattleMetricResponse, Box<dyn Error>> {
         Some(id) => {
             format!("{}", id)
         }
-        None => {
-            env::var("BATTLEMETRICS_SERVER_ID")
-                .expect("BATTLEMETRICS_SERVER_ID environment variable not found!")
-        }
+        None => env::var("BATTLEMETRICS_SERVER_ID")
+            .expect("BATTLEMETRICS_SERVER_ID environment variable not found!"),
     };
 
     let url = format!("https://api.battlemetrics.com/servers/{}", server_id);
@@ -371,5 +366,20 @@ mod tests {
         let cached_name = cached_result.data.as_ref().unwrap().attributes.name.clone();
 
         assert_eq!(result.data.unwrap().attributes.name, cached_name);
+    }
+
+    #[tokio::test]
+    async fn test_battlemetrics_search() {
+        setup_env();
+
+        let result = get_battlemetrics_server_id().await;
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), 11172068);
+    }
+
+    #[tokio::test]
+    async fn test_battlemetrics_search_fail() {
+        let result = get_battlemetrics_server_id().await;
+        assert!(result.is_none());
     }
 }
