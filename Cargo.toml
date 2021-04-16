@@ -1,5 +1,5 @@
 [package]
-name = "dayz_time_rs"
+name = "dayz-monitor"
 version = "0.1.0"
 authors = ["Jordyn <jordyn@husk.pro>"]
 edition = "2018"

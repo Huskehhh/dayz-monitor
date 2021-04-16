@@ -10,7 +10,15 @@ DayZ monitoring discord bot, that doesn't require RCon! (Thanks to BattleMetrics
 
 ## Setup
 
-### Step 1. Compilation
+### Docker (preferred)
+
+Find the docker image [here](https://hub.docker.com/repository/docker/jordynnewnham/dayz-monitor)
+
+This is automatically built on each push to master and pushed to the ``latest`` tag.
+
+Simply pull the image and set the required environment variables (see below -> ``Configuration``)
+
+### Compilation
 
 To do this you will need [Rust](https://www.rust-lang.org/tools/install) installed, so go do that, then come back!
 
@@ -26,7 +34,7 @@ Now dayz-monitor has been compiled. You're almost ready! All that is left is som
 
 ### Step 2. Configuration
 
-First of all, all configuration options are handled via environment variables, 
+First of all, all configuration options are handled via environment variables,
 which can either be set globally or simply through a .env file (I recommend the latter!)
 So simply go ahead and create a ``.env`` file contaning these following values:
 

@@ -355,7 +355,14 @@ mod tests {
     use super::*;
 
     fn setup_env() {
-        dotenv().ok();
+        // Set as a known server that wont (or shouldn't) change ID
+        // https://www.battlemetrics.com/servers/dayz/5526399
+        env::set_var("BATTLEMETRICS_SERVER_ID", "5526399");
+    }
+
+    fn cleanup_env() {
+        env::remove_var("BATTLEMETRICS_SERVER_ID");
+        env::remove_var("BATTLEMETRICS_SEARCH");
     }
 
     #[tokio::test]
@@ -367,7 +374,9 @@ mod tests {
 
         let unwrapped = result.unwrap();
 
-        assert_ne!(unwrapped.data.unwrap().attributes.name, "".to_owned())
+        assert_ne!(unwrapped.data.unwrap().attributes.name, "".to_owned());
+
+        cleanup_env();
     }
 
     #[tokio::test]
@@ -387,20 +396,26 @@ mod tests {
 
         assert_eq!(result_data.attributes.name, cached_name);
         assert_ne!(result_data.attributes.ip.is_empty(), true);
+
+        cleanup_env();
     }
 
     #[tokio::test]
     async fn test_battlemetrics_search() {
-        setup_env();
+        env::set_var("BATTLEMETRICS_SEARCH", "DayZ AP - SY 1023");
 
         let result = get_battlemetrics_server_id().await;
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), 11172068);
+        assert_eq!(result.unwrap(), 5526399);
+
+        cleanup_env();
     }
 
     #[tokio::test]
     async fn test_battlemetrics_search_fail() {
         let result = get_battlemetrics_server_id().await;
         assert!(result.is_none());
+
+        cleanup_env();
     }
 }
