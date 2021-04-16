@@ -355,7 +355,9 @@ mod tests {
     use super::*;
 
     fn setup_env() {
-        dotenv().ok();
+        // Set as a known server that wont (or shouldn't) change ID
+        // https://www.battlemetrics.com/servers/dayz/5526399
+        env::set_var("BATTLEMETRICS_SERVER_ID", "5526399");
     }
 
     #[tokio::test]
@@ -391,11 +393,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_battlemetrics_search() {
-        setup_env();
+        env::set_var("BATTLEMETRICS_SEARCH", "DayZ AP - SY 1023");
 
         let result = get_battlemetrics_server_id().await;
         assert!(result.is_some());
-        assert_eq!(result.unwrap(), 11172068);
+        assert_eq!(result.unwrap(), 5526399);
     }
 
     #[tokio::test]
