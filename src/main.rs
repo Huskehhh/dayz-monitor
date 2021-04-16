@@ -30,7 +30,7 @@ static CACHED: Lazy<Arc<RwLock<BattleMetricResponse>>> = Lazy::new(|| {
 });
 
 #[group]
-#[commands(time, count, status, info)]
+#[commands(time, count, status, info, ip)]
 struct General;
 
 #[command]
@@ -88,6 +88,22 @@ async fn info(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
     Ok(())
 }
 
+#[command]
+async fn ip(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
+    if let Some(cached_result) = &CACHED.read().await.data {
+        send_message(
+            &ctx.http,
+            &msg.channel_id,
+            &format!(
+                "IP: {}:{}",
+                cached_result.attributes.ip, cached_result.attributes.port
+            ),
+        )
+        .await;
+    }
+    Ok(())
+}
+
 #[hook]
 async fn normal_message(_ctx: &Context, msg: &Message) {
     println!("{}: {}", msg.author.name, msg.content);
@@ -113,6 +129,22 @@ struct BattleMetricResponse {
     data: Option<DataObject>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+struct BattleMetricSearchResponse {
+    data: Option<Vec<SearchResponseData>>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct SearchResponseData {
+    id: String,
+}
+
+impl Default for BattleMetricSearchResponse {
+    fn default() -> Self {
+        BattleMetricSearchResponse { data: None }
+    }
+}
+
 impl Default for BattleMetricResponse {
     fn default() -> Self {
         BattleMetricResponse { data: None }
@@ -130,6 +162,8 @@ struct Attributes {
     players: i32,
     status: String,
     details: Details,
+    ip: String,
+    port: i32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -160,8 +194,14 @@ impl EventHandler for Handler {
 }
 
 async fn get_server_status() -> Result<BattleMetricResponse, Box<dyn Error>> {
-    let server_id = env::var("BATTLEMETRICS_SERVER_ID")
-        .expect("BATTLEMETRICS_SERVER_ID environment variable not found!");
+    let server_id = match get_battlemetrics_server_id().await {
+        Some(id) => {
+            format!("{}", id)
+        }
+        None => env::var("BATTLEMETRICS_SERVER_ID")
+            .expect("BATTLEMETRICS_SERVER_ID environment variable not found!"),
+    };
+
     let url = format!("https://api.battlemetrics.com/servers/{}", server_id);
     Ok(reqwest::get(&url)
         .await?
@@ -197,6 +237,25 @@ async fn create_embedded_message(http: &Http, result: &DataObject, channel_id: C
     {
         eprintln!("Error sending message to channel, {}", e);
     }
+}
+
+async fn get_battlemetrics_search_response() -> Result<BattleMetricSearchResponse, Box<dyn Error>> {
+    let search_query = env::var("BATTLEMETRICS_SEARCH")?;
+    let url = format!("https://api.battlemetrics.com/servers?filter[game]=dayz&filter[search]={}&filter[status]=online&page[size]=1", search_query);
+
+    Ok(reqwest::get(&url)
+        .await?
+        .json::<BattleMetricSearchResponse>()
+        .await?)
+}
+
+async fn get_battlemetrics_server_id() -> Option<i32> {
+    let battlemetrics_search_response = get_battlemetrics_search_response().await.ok()?;
+    let data_vec = battlemetrics_search_response.data?;
+    let id_str = &data_vec.first()?.id;
+    let id = id_str.parse::<i32>().ok()?;
+
+    Some(id)
 }
 
 #[tokio::main]
@@ -324,6 +383,24 @@ mod tests {
         let cached_result = &CACHED.read().await;
         let cached_name = cached_result.data.as_ref().unwrap().attributes.name.clone();
 
-        assert_eq!(result.data.unwrap().attributes.name, cached_name);
+        let result_data = result.data.unwrap();
+
+        assert_eq!(result_data.attributes.name, cached_name);
+        assert_ne!(result_data.attributes.ip.is_empty(), true);
+    }
+
+    #[tokio::test]
+    async fn test_battlemetrics_search() {
+        setup_env();
+
+        let result = get_battlemetrics_server_id().await;
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), 11172068);
+    }
+
+    #[tokio::test]
+    async fn test_battlemetrics_search_fail() {
+        let result = get_battlemetrics_server_id().await;
+        assert!(result.is_none());
     }
 }
