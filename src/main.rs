@@ -30,7 +30,7 @@ static CACHED: Lazy<Arc<RwLock<BattleMetricResponse>>> = Lazy::new(|| {
 });
 
 #[group]
-#[commands(time, count, status, info)]
+#[commands(time, count, status, info, ip)]
 struct General;
 
 #[command]
@@ -84,6 +84,22 @@ async fn status(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult 
 async fn info(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
     if let Some(cached_result) = &CACHED.read().await.data {
         create_embedded_message(&ctx.http, &cached_result, msg.channel_id).await;
+    }
+    Ok(())
+}
+
+#[command]
+async fn ip(ctx: &Context, msg: &Message, mut _args: Args) -> CommandResult {
+    if let Some(cached_result) = &CACHED.read().await.data {
+        send_message(
+            &ctx.http,
+            &msg.channel_id,
+            &format!(
+                "IP: {}:{}",
+                cached_result.attributes.ip, cached_result.attributes.port
+            ),
+        )
+        .await;
     }
     Ok(())
 }
@@ -146,6 +162,8 @@ struct Attributes {
     players: i32,
     status: String,
     details: Details,
+    ip: String,
+    port: i32,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -365,7 +383,10 @@ mod tests {
         let cached_result = &CACHED.read().await;
         let cached_name = cached_result.data.as_ref().unwrap().attributes.name.clone();
 
-        assert_eq!(result.data.unwrap().attributes.name, cached_name);
+        let result_data = result.data.unwrap();
+
+        assert_eq!(result_data.attributes.name, cached_name);
+        assert_ne!(result_data.attributes.ip.is_empty(), true);
     }
 
     #[tokio::test]
