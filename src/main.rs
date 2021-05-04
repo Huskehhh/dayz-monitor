@@ -259,64 +259,62 @@ async fn get_battlemetrics_server_id() -> Option<i32> {
 }
 
 #[tokio::main]
-pub async fn update_cache(mutex_http: Mutex<Arc<CacheAndHttp>>) -> Result<(), Box<dyn Error>> {
-    loop {
-        let result = get_server_status().await?;
-        let mut write_guard = CACHED.write().await;
+pub async fn update_cache(mutex_http: &Mutex<Arc<CacheAndHttp>>) -> Result<(), Box<dyn Error>> {
+    let result = get_server_status().await?;
+    let mut write_guard = CACHED.write().await;
 
-        // Set to new value
-        *write_guard = result.clone();
+    // Set to new value
+    *write_guard = result.clone();
 
-        std::mem::drop(write_guard);
+    std::mem::drop(write_guard);
 
-        let player_count = result.data.unwrap().attributes.players;
-        let guild_id_var = env::var("GUILD_ID");
-        let server_name_var = env::var("SERVER_NAME");
+    let player_count = result.data.unwrap().attributes.players;
+    let guild_id_var = env::var("GUILD_ID");
+    let server_name_var = env::var("SERVER_NAME");
 
-        if let Ok(guild_id) = guild_id_var {
-            if let Ok(server_name) = server_name_var {
-                let lock = mutex_http.lock().unwrap();
-                let http = &lock.http;
+    if let Ok(guild_id) = guild_id_var {
+        if let Ok(server_name) = server_name_var {
+            let lock = mutex_http.lock().unwrap();
+            let http = &lock.http;
 
-                let parsed_guild_id = guild_id.parse::<u64>()?;
-                let guild = http.get_guild(parsed_guild_id).await?;
+            let parsed_guild_id = guild_id.parse::<u64>()?;
+            let guild = http.get_guild(parsed_guild_id).await?;
 
-                let name = format!("{}: {}", server_name, player_count);
+            let name = format!("{}: {}", server_name, player_count);
 
-                let channels = guild.channels(&http).await?;
+            let channels = guild.channels(&http).await?;
 
-                let mut exists = false;
+            let mut exists = false;
 
-                for mut entry in channels {
-                    if entry.1.name.starts_with(&server_name) {
-                        exists = true;
+            for mut entry in channels {
+                if entry.1.name.starts_with(&server_name) {
+                    exists = true;
 
-                        println!("Updating channel to: '{}'", name);
+                    println!("Updating channel to: '{}'", name);
 
-                        entry
-                            .1
-                            .edit(&http, |c| {
-                                c.name(&name);
-                                c
-                            })
-                            .await?;
-                    }
-                }
-
-                if !exists {
-                    guild
-                        .create_channel(http, |c| {
+                    entry
+                        .1
+                        .edit(&http, |c| {
                             c.name(&name);
-                            c.kind(ChannelType::Voice);
                             c
                         })
                         .await?;
                 }
             }
-        }
 
-        sleep(Duration::from_secs(10));
+            if !exists {
+                guild
+                    .create_channel(http, |c| {
+                        c.name(&name);
+                        c.kind(ChannelType::Voice);
+                        c
+                    })
+                    .await?;
+            }
+        }
     }
+
+    Ok(())
 }
 
 #[tokio::main]
@@ -339,10 +337,11 @@ async fn main() {
 
     let mutex_http = Mutex::new(client.cache_and_http.clone());
 
-    thread::spawn(|| {
-        if let Err(why) = update_cache(mutex_http) {
+    thread::spawn(move || loop {
+        if let Err(why) = update_cache(&mutex_http) {
             eprintln!("Error when updating cache: {}", why);
         }
+        sleep(Duration::from_secs(10));
     });
 
     if let Err(why) = client.start().await {
