@@ -25,8 +25,7 @@ use serenity::{model::gateway::Ready, model::Permissions};
 static CACHED: Lazy<Arc<RwLock<BattleMetricResponse>>> = Lazy::new(|| {
     let battle_metrics_response = BattleMetricResponse::default();
     let mutex = RwLock::new(battle_metrics_response);
-    let arc = Arc::new(mutex);
-    arc
+    Arc::new(mutex)
 });
 
 #[group]
@@ -198,8 +197,9 @@ async fn get_server_status() -> Result<BattleMetricResponse, Box<dyn Error>> {
         Some(id) => {
             format!("{}", id)
         }
-        None => env::var("BATTLEMETRICS_SERVER_ID")
-            .expect("BATTLEMETRICS_SERVER_ID environment variable not found!"),
+        None => {
+            env::var("BATTLEMETRICS_SERVER_ID")?
+        },
     };
 
     let url = format!("https://api.battlemetrics.com/servers/{}", server_id);
