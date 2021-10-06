@@ -1,4 +1,4 @@
-FROM rust:1.50.0 as builder
+FROM rust:latest as builder
 
 WORKDIR /usr/src/dayz-monitor
 COPY . .
@@ -10,7 +10,9 @@ FROM debian:latest
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install ca-certificates -y && apt-get install openssl -y 
 
-COPY --from=builder /usr/local/cargo/bin/dayz-monitor /
+COPY --from=builder /usr/local/cargo/bin/dayz-monitor /usr/local/bin/dayz-monitor
 
-CMD ["./dayz-monitor"]
+USER 1000
+
+CMD ["dayz-monitor"]
 
