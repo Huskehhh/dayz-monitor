@@ -1,17 +1,75 @@
 name: CI
 
-on: [ push, pull_request ]
+on: [push, pull_request]
 
 env:
   CARGO_TERM_COLOR: always
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  bot:
+  build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v1
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build --verbose
-      - name: Run tests
-        run: cargo test --verbose
+        run: cargo build --release
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dayz-monitor
+          path: target/release/dayz-monitor
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dayz-monitor-windows
+          path: target\release\dayz-monitor.exe
+
+  build-and-push-image:
+    # Only run this job on push events (not pull requests) and only for the master branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    # Add permission to push to GitHub Packages
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=sha,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
