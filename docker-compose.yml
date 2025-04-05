@@ -1,0 +1,10 @@
+services:
+  dayzmonitor:
+    image: ghcr.io/Huskehhh/dayz-monitor:latest
+    container_name: dayz-monitor
+    environment:
+      DISCORD_TOKEN="yep"
+      SERVER_ADDRESS="1.2.3.4:2303"
+      SERVER_NAME="My cool server"
+      VOICE_CHANNEL_ID=1234
+    restart: unless-stopped
