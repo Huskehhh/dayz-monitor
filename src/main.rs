@@ -16,13 +16,13 @@ fn pretty_print_players_in_queue(server_info: &ServerInfo) -> String {
     match &server_info.players_in_queue {
         Some(num_queued) => {
             format!(
-                "{} (+ {}) / {} players online.",
-                server_info.players, num_queued, server_info.max_players
+                "{}/{} (+{})",
+                server_info.players, server_info.max_players, num_queued
             )
         }
-        None => {
+        None(num_queued) => {
             format!(
-                "{} / {} players online.",
+                "{}/{}",
                 server_info.players, server_info.max_players
             )
         }
